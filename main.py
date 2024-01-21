@@ -13,14 +13,22 @@ import ssl
 ssl._create_default_https_context = ssl._create_stdlib_context
 from moviepy.editor import *
 from moviepy.config import change_settings
+from moviepy.editor import VideoFileClip, AudioFileClip
+
 from mutagen.id3 import ID3, ID3NoHeaderError, TIT2, TPE1, TALB
 import os
 from pprint import pprint
 import time
 from PIL import Image, ImageTk
+import threading
+from pytube.exceptions import VideoUnavailable
 
 # 設定log
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(
+    format="[%(asctime)s][%(name)-5s][%(levelname)-5s] %(message)s (%(filename)s:%(lineno)d)",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    level=logging.DEBUG
+)
 
 # 獲取程式的當前路徑
 current_path = os.path.dirname(os.path.realpath(__file__))
@@ -47,6 +55,7 @@ def on_progress(video_list, chunk, bytes_remaining):
     win.update_idletasks()
 
 def check_video_stat(event=None):
+    url_download["state"] = "disabled"
     if url_input.get() == "":
         messagebox.showinfo("提示", "請輸入YouTube影片網址")
         return
@@ -73,6 +82,7 @@ def check_video_stat(event=None):
 
     video_qlsel["values"] = video_list2
     video_path.insert(0, os.path.join(current_path, yt.title))
+    url_download["state"] = "normal"
 
 # 檢查 ffmpeg.exe 是否存在
 def check_ffmpeg():
@@ -99,28 +109,64 @@ def convert_video_to_audio(video_path):
     # except Exception as e:
     #     logging.critical(e)
 
+def on_complete():
+    messagebox.showinfo("提示", "下載完成")
+
 # 主下載程式
 def download_video():
     logging.debug("下載中...")
     selected_quality = video_qlsel.get()
+    selected_resolution = selected_quality.split('：')[1]  # 從選擇的品質中取得解析度
     selected_abr = selected_quality.split('：')[1]  # 從選擇的品質中取得音訊比特率
-    for stream in video_list:
-        logging.debug(f"選擇的品質: {selected_quality}, 流的解析度: {stream.resolution}, 流的音訊比特率: {stream.abr}")
-        if stream.abr == selected_abr and stream.mime_type == "audio/mp4":
-            logging.debug("偵測到類型為音訊...")
-            audio_path = stream.download()
-            logging.info(f"音訊已下載，檔案路徑: {audio_path}")
-            mp3_path = convert_video_to_audio(audio_path)  # 轉換下載的 .mp4 檔案為 .mp3
-            logging.info(f"檔案已轉換為 .mp3，檔案路徑: {mp3_path}")
-            break
-        elif stream.resolution == selected_quality and stream.mime_type.startswith("video"):
-            logging.debug("偵測到類型為影片...")
-            video_path = stream.download()
-            logging.info(f"影片已下載，檔案路徑: {video_path}")
-            break
-        else:
-            logging.debug("無法偵測到類型...")
-            # messagebox.showinfo("提示", "無法偵測到類型")
+    def download_in_thread(progress_callback):
+        nonlocal selected_resolution
+        total_streams = len(video_list)
+        for i, stream in enumerate(video_list):
+            logging.debug(f"選擇的品質: {selected_quality}, 流的解析度: {stream.resolution}, 流的音訊比特率: {stream.abr}")
+
+            if stream.resolution == selected_resolution and stream.mime_type == "video/mp4":
+                logging.debug("偵測到類型為影片...")
+                video_path = stream.download()
+                logging.info(f"影片已下載，檔案路徑: {video_path}")
+                
+                # 從 YouTube 物件中獲取音訊流
+                yt = YouTube(url_input.get(), on_progress_callback=progress_callback)
+                audio_stream = yt.streams.get_audio_only()
+                if audio_stream:
+                    audio_path = audio_stream.download(filename=yt.title + "_audio.mp3")
+                    logging.info(f"音訊已下載，檔案路徑: {audio_path}")
+                    mp3_path = convert_video_to_audio(audio_path)  # 轉換下載的 .mp4 檔案為 .mp3
+                    logging.info(f"檔案已轉換為 .mp3，檔案路徑: {mp3_path}")
+                else:
+                    logging.warning("影片流中沒有音訊軌")
+                
+                # 將影片和音訊合併
+                logging.debug("合併中...")
+                video = VideoFileClip(video_path)
+                audio = AudioFileClip(mp3_path)
+                video = video.set_audio(audio)
+                video.write_videofile(video_path.replace(".mp4", "_Merged_ytPython.mp4"), logger="bar")
+                logging.info(f"影片已合併，檔案路徑: {video_path.replace('.mp4', '_Merged_ytPython.mp4')}")
+
+                # 刪除原始檔案
+                os.remove(video_path)
+                os.remove(mp3_path)
+                
+                break
+            elif stream.abr == selected_abr and stream.mime_type == "audio/mp4":
+                logging.debug("偵測到類型為音訊...")
+                audio_path = stream.download()
+                logging.info(f"音訊已下載，檔案路徑: {audio_path}")
+                mp3_path = convert_video_to_audio(audio_path)  # 轉換下載的 .mp4 檔案為 .mp3
+                logging.info(f"檔案已轉換為 .mp3，檔案路徑: {mp3_path}")
+                break
+            else:
+                logging.debug("無法偵測到類型...")
+
+    # 將進度條更新函數傳遞給 download_in_thread
+    download_thread = threading.Thread(target=download_in_thread, args=(on_progress,))
+    download_thread.start()
+    # messagebox.showinfo("提示", "無法偵測到類型")
 
 # # 主下載程式
 # def download_video():
