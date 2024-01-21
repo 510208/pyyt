@@ -119,6 +119,22 @@ def on_complete():
 
 # 主下載程式
 def download_video():
+    if video_qlsel.get() == "":
+        messagebox.showinfo("提示", "請選擇影片品質")
+        return
+    if video_path.get() == "":
+        messagebox.showinfo("提示", "請選擇儲存路徑")
+        return
+    if not os.path.exists(video_path.get()):
+        messagebox.showinfo("提示", "路徑不存在")
+        return
+    if not os.path.isdir(video_path.get()):
+        messagebox.showinfo("提示", "路徑不是資料夾")
+        return
+    if not os.access(video_path.get(), os.W_OK):
+        messagebox.showinfo("提示", "路徑無寫入權限")
+        return
+    
     logging.debug("下載中...")
     stat_lbl["text"] = "狀態：檢測中..."
     selected_quality = video_qlsel.get()
