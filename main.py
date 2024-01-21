@@ -13,8 +13,6 @@ import ssl
 ssl._create_default_https_context = ssl._create_stdlib_context
 from moviepy.editor import *
 from moviepy.config import change_settings
-from moviepy.editor import VideoFileClip, AudioFileClip
-
 from mutagen.id3 import ID3, ID3NoHeaderError, TIT2, TPE1, TALB
 import os
 from pprint import pprint
@@ -22,8 +20,11 @@ import time
 from PIL import Image, ImageTk
 import threading
 from pytube.exceptions import VideoUnavailable
+import colorlog
+import matplotlib
+matplotlib.use('TkAgg', force=True)
 
-# 設定log
+# 設定 logging
 logging.basicConfig(
     format="[%(asctime)s][%(name)-5s][%(levelname)-5s] %(message)s (%(filename)s:%(lineno)d)",
     datefmt="%Y-%m-%d %H:%M:%S",
@@ -41,9 +42,10 @@ change_settings({"FFMPEG_BINARY": os.path.join(current_path, "ffmpeg.exe")})
 
 # 建立視窗物件
 win = ThemedTk(theme="arc")
+# win = tk.Tk()
 win.title("ytPython - 開源版")
 win.geometry("580x450")
-win.resizable(True, True)
+win.resizable(False, False)
 
 # 建立函式
 def on_progress(video_list, chunk, bytes_remaining):
@@ -59,6 +61,8 @@ def check_video_stat(event=None):
     if url_input.get() == "":
         messagebox.showinfo("提示", "請輸入YouTube影片網址")
         return
+    
+    stat_lbl["text"] = "狀態：取得資料中..."
 
     global yt
     yt = YouTube(url_input.get(), on_progress_callback=on_progress)
@@ -115,6 +119,7 @@ def on_complete():
 # 主下載程式
 def download_video():
     logging.debug("下載中...")
+    stat_lbl["text"] = "狀態：檢測中..."
     selected_quality = video_qlsel.get()
     selected_resolution = selected_quality.split('：')[1]  # 從選擇的品質中取得解析度
     selected_abr = selected_quality.split('：')[1]  # 從選擇的品質中取得音訊比特率
@@ -123,11 +128,14 @@ def download_video():
         total_streams = len(video_list)
         for i, stream in enumerate(video_list):
             logging.debug(f"選擇的品質: {selected_quality}, 流的解析度: {stream.resolution}, 流的音訊比特率: {stream.abr}")
+            stat_lbl["text"] = "狀態：正在檢測類型"
 
             if stream.resolution == selected_resolution and stream.mime_type == "video/mp4":
                 logging.debug("偵測到類型為影片...")
+                stat_lbl["text"] = "狀態：已偵測到類型 - 影片"
                 video_path = stream.download()
                 logging.info(f"影片已下載，檔案路徑: {video_path}")
+                stat_lbl["text"] = "狀態：已下載影片(無音軌)) - 正在下載音軌..."
                 
                 # 從 YouTube 物件中獲取音訊流
                 yt = YouTube(url_input.get(), on_progress_callback=progress_callback)
@@ -135,30 +143,41 @@ def download_video():
                 if audio_stream:
                     audio_path = audio_stream.download(filename=yt.title + "_audio.mp3")
                     logging.info(f"音訊已下載，檔案路徑: {audio_path}")
+                    stat_lbl["text"] = "狀態：已下載影片及音軌，音軌轉檔中..."
                     mp3_path = convert_video_to_audio(audio_path)  # 轉換下載的 .mp4 檔案為 .mp3
                     logging.info(f"檔案已轉換為 .mp3，檔案路徑: {mp3_path}")
+                    stat_lbl["text"] = "狀態：音軌轉檔完畢"
                 else:
                     logging.warning("影片流中沒有音訊軌")
+                    stat_lbl["text"] = "狀態：影片流中沒有音訊軌"
                 
                 # 將影片和音訊合併
                 logging.debug("合併中...")
+                stat_lbl["text"] = "狀態：合併影片及音軌中..."
                 video = VideoFileClip(video_path)
                 audio = AudioFileClip(mp3_path)
                 video = video.set_audio(audio)
+                stat_lbl["text"] = "狀態：合併影音中，進度條於終端中(請勿關閉視窗，此步驟需要較長時間，請耐心等候...)"
                 video.write_videofile(video_path.replace(".mp4", "_Merged_ytPython.mp4"), logger="bar")
+                stat_lbl["text"] = "狀態：合併影片及音軌完畢"
                 logging.info(f"影片已合併，檔案路徑: {video_path.replace('.mp4', '_Merged_ytPython.mp4')}")
+                stat_lbl["text"] = "狀態：任務已完成，正在移除暫存檔中..."
 
                 # 刪除原始檔案
                 os.remove(video_path)
                 os.remove(mp3_path)
+                stat_lbl["text"] = "狀態：任務已完成"
                 
                 break
             elif stream.abr == selected_abr and stream.mime_type == "audio/mp4":
                 logging.debug("偵測到類型為音訊...")
+                stat_lbl["text"] = "狀態：已偵測到類型 - 音訊"
                 audio_path = stream.download()
                 logging.info(f"音訊已下載，檔案路徑: {audio_path}")
+                stat_lbl["text"] = "狀態：已下載音軌，音軌轉檔中..."
                 mp3_path = convert_video_to_audio(audio_path)  # 轉換下載的 .mp4 檔案為 .mp3
                 logging.info(f"檔案已轉換為 .mp3，檔案路徑: {mp3_path}")
+                stat_lbl["text"] = "狀態：任務已完成：下載音訊檔..."
                 break
             else:
                 logging.debug("無法偵測到類型...")
@@ -252,6 +271,22 @@ tip.grid(row=5, column=0, padx=10, pady=10, sticky='w')
 
 progress_bar = ttk.Progressbar(win, length=560)
 progress_bar.grid(row=6, column=0, columnspan=2, padx=10, pady=10, sticky='w')
+
+stat_lbl = ttk.Label(win, text="狀態：無任務", anchor="e", justify="right", width=50, background="systembuttonface")
+stat_lbl.grid(row=7, column=0, columnspan=2, padx=10, pady=10, sticky='w')
+
+# 載入圖片並調整大小
+img = Image.open("anime.png")  # 請將 "anime.png" 替換為您的圖片檔案路徑
+height_ratio = 100.0 / img.height  # 計算高度的比例
+resized_img = img.resize((int(img.width * height_ratio), 100), Image.LANCZOS)  # 使用 LANCZOS 濾波器
+
+# 將 PIL 圖片轉換為 PhotoImage
+photo = ImageTk.PhotoImage(resized_img)
+
+# 建立一個標籤來顯示圖片
+label = ttk.Label(win, image=photo, background="systembuttonface")
+label.place(relx=1, rely=1, anchor="se")  # 將圖片放在視窗的右下角
+label.lower()  # 將圖片放在視窗的最底層
 
 win.lift()
 win.mainloop()
