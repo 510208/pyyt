@@ -46,7 +46,7 @@ win = ThemedTk(theme="arc")
 win.title("ytPython - 開源版")
 win.geometry("580x450")
 win.resizable(False, False)
-win.iconbitmap('icon.ico')
+win.iconbitmap("icon.ico")
 
 # 建立函式
 def on_progress(video_list, chunk, bytes_remaining):
@@ -221,7 +221,7 @@ def download_video():
 
 # 建立物件
 # 加載圖片
-logo = PhotoImage(file='logo.png')  # 請將 'logo.png' 替換為你的圖片檔案路徑
+logo = PhotoImage(file="logo.png")  # 請將 'logo.png' 替換為你的圖片檔案路徑
 
 # 創建一個空的 Label
 empty_label = ttk.Label(win, width=50)
@@ -232,7 +232,7 @@ win.update()  # 更新視窗以確保獲取的寬度是正確的
 width = empty_label.winfo_width()
 
 # 加載圖片
-image = Image.open('logo.png')  # 請將 'logo.png' 替換為你的圖片檔案路徑
+image = Image.open("logo.png")  # 請將 'logo.png' 替換為你的圖片檔案路徑
 
 # 計算新的高度
 original_width, original_height = image.size
