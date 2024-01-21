@@ -113,6 +113,11 @@ def download_video():
             mp3_path = convert_video_to_audio(audio_path)  # 轉換下載的 .mp4 檔案為 .mp3
             logging.info(f"檔案已轉換為 .mp3，檔案路徑: {mp3_path}")
             break
+        elif stream.resolution == selected_quality and stream.mime_type.startswith("video"):
+            logging.debug("偵測到類型為影片...")
+            video_path = stream.download()
+            logging.info(f"影片已下載，檔案路徑: {video_path}")
+            break
         else:
             logging.debug("無法偵測到類型...")
             # messagebox.showinfo("提示", "無法偵測到類型")
