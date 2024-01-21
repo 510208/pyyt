@@ -46,6 +46,7 @@ win = ThemedTk(theme="arc")
 win.title("ytPython - 開源版")
 win.geometry("580x450")
 win.resizable(False, False)
+win.iconbitmap('icon.ico')
 
 # 建立函式
 def on_progress(video_list, chunk, bytes_remaining):
